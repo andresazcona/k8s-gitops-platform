@@ -1,0 +1,10 @@
+# Grafana's dashboard sidecar (kube-prometheus-stack) loads every ConfigMap labelled grafana_dashboard=1.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+configMapGenerator:
+  - name: shop-red-dashboard
+    files: [shop-red.json]
+generatorOptions:
+  disableNameSuffixHash: true
+  labels: {grafana_dashboard: "1"}

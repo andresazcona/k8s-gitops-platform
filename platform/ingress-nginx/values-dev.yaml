@@ -1,0 +1,15 @@
+# kind: bind the controller to ports 80/443 of the node that kind maps to localhost.
+controller:
+  hostPort:
+    enabled: true
+  service:
+    type: NodePort
+  nodeSelector:
+    ingress-ready: "true"
+    kubernetes.io/os: linux
+  tolerations:
+    - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+  publishService:
+    enabled: false
+  extraArgs:
+    publish-status-address: localhost

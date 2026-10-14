@@ -1,0 +1,37 @@
+# Trace gateway: services push OTLP here, the collector enriches with k8s metadata and forwards to Tempo.
+# Metrics do not flow through it: Prometheus scrapes each pod directly (see charts/service ServiceMonitor).
+mode: deployment
+fullnameOverride: otel-collector
+image:
+  repository: otel/opentelemetry-collector-k8s
+presets:
+  kubernetesAttributes:
+    enabled: true   # adds k8s.namespace/deployment/pod to every span
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 256Mi}
+ports:
+  jaeger-compact: {enabled: false}
+  jaeger-thrift: {enabled: false}
+  jaeger-grpc: {enabled: false}
+  zipkin: {enabled: false}
+  metrics: {enabled: true}   # collector self-telemetry for the ServiceMonitor below
+serviceMonitor:
+  enabled: true
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+  exporters:
+    otlp/tempo:
+      endpoint: tempo.observability.svc:4317
+      tls: {insecure: true}
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/tempo]
+      metrics: null
+      logs: null

@@ -1,0 +1,13 @@
+# Single-binary Tempo with local storage: enough for dev and a demo. Prod would use object storage (S3/GCS).
+fullnameOverride: tempo
+tempo:
+  retention: 72h
+  reportingEnabled: false
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+persistence:
+  enabled: true
+  size: 5Gi

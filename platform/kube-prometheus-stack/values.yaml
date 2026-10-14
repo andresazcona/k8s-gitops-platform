@@ -1,0 +1,25 @@
+# Prometheus Operator + Prometheus + Alertmanager + Grafana + kube-state-metrics + node-exporter.
+prometheus:
+  prometheusSpec:
+    # Pick up ServiceMonitors/PrometheusRules from every namespace, not only this release's.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 7d
+    resources:
+      requests: {cpu: 200m, memory: 512Mi}
+grafana:
+  defaultDashboardsTimezone: utc
+  additionalDataSources:
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.observability.svc:3200
+      jsonData:
+        serviceMap: {datasourceUid: prometheus}
+        nodeGraph: {enabled: true}
+# Managed control planes (EKS/GKE/AKS) do not expose these components.
+kubeEtcd: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
