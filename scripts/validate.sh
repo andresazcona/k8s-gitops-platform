@@ -9,8 +9,7 @@ kc() {
   kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" \
     -schema-location default -schema-location "$CRD_SCHEMAS" "$@"
 }
-# "name repoURL version" for every pinned add-on chart in the app-of-apps.
-addons() { awk '/- name:/{n=$3} /repoURL:/{r=$2} /version:/{print n, r, $2}' gitops/apps/values.yaml; }
+source scripts/lib.sh
 
 echo "== lint"
 helm lint --strict charts/service -f apps/api-gateway/values.yaml -f envs/dev/values.yaml
@@ -26,7 +25,7 @@ for env in dev prod; do
   echo "== app-of-apps ($env)"
   helm template platform gitops/apps -f "gitops/apps/values-$env.yaml" | kc
 
-  while read -r name repo version; do
+  while read -r name repo version _; do
     echo "== add-on $name $version ($env)"
     files=(-f "platform/$name/values.yaml")
     [[ -f platform/$name/values.yaml ]] || files=()
