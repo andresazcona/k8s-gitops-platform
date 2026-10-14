@@ -14,13 +14,14 @@ TAG=${TAG:-local}
 kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER" --config kind/kind-config.yaml
 kubectl config use-context "kind-$CLUSTER"
 
-addon() { # name: install the pinned chart with the dev values, exactly as the app-of-apps would
+addon() { # name [helm args]: install the pinned chart with the dev values, exactly as the app-of-apps would
   local name repo version ns files=()
   read -r name repo version ns < <(addons | grep "^$1 ")
+  shift
   files+=(-f "platform/$name/values.yaml")
   [[ -f platform/$name/values-dev.yaml ]] && files+=(-f "platform/$name/values-dev.yaml")
   helm upgrade --install "$name" "$name" --repo "$repo" --version "$version" -n "$ns" --create-namespace \
-    "${files[@]}" --wait --timeout 10m
+    "${files[@]}" "$@" --wait --timeout 10m
 }
 
 echo "== images"
@@ -33,9 +34,15 @@ done
 
 echo "== platform"
 scripts/secrets.sh
-addon ingress-nginx
+# The monitoring CRDs must exist before anything asks for a ServiceMonitor: install the stack first, or turn it off.
+if [[ -n ${OBS:-} ]]; then
+  addon kube-prometheus-stack
+  addon ingress-nginx
+else
+  addon ingress-nginx --set controller.metrics.serviceMonitor.enabled=false
+fi
 addon metrics-server
-if [[ -n ${OBS:-} ]]; then addon kube-prometheus-stack; addon tempo; addon opentelemetry-collector; fi
+if [[ -n ${OBS:-} ]]; then addon tempo; addon opentelemetry-collector; fi
 kubectl apply -k platform/mongodb
 kubectl -n data rollout status statefulset/mongodb --timeout=5m
 [[ -n ${OBS:-} ]] && kubectl apply -k platform/dashboards
