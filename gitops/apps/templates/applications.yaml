@@ -1,0 +1,50 @@
+{{- $env := required "env is required (use values-<env>.yaml)" .Values.env }}
+{{- range .Values.addons }}
+---
+{{ include "app.header" . }}
+spec:
+  project: shop
+  sources:
+    - repoURL: {{ .repoURL }}
+      chart: {{ .name }}
+      targetRevision: {{ .version | quote }}
+      helm:
+        releaseName: {{ .name }}
+        ignoreMissingValueFiles: true
+        valueFiles:
+          - $values/platform/{{ .name }}/values.yaml
+          - $values/platform/{{ .name }}/values-{{ $env }}.yaml
+    - repoURL: {{ $.Values.repoURL }}
+      targetRevision: {{ $.Values.targetRevision }}
+      ref: values
+  {{- include "app.syncPolicy" (dict "root" $ "app" .) | nindent 2 }}
+{{- end }}
+
+{{- range .Values.manifests }}
+---
+{{ include "app.header" . }}
+spec:
+  project: shop
+  source:
+    repoURL: {{ $.Values.repoURL }}
+    targetRevision: {{ $.Values.targetRevision }}
+    path: {{ .path }}
+  {{- include "app.syncPolicy" (dict "root" $ "app" .) | nindent 2 }}
+{{- end }}
+
+{{- range .Values.services }}
+---
+{{ include "app.header" . }}
+spec:
+  project: shop
+  source:
+    repoURL: {{ $.Values.repoURL }}
+    targetRevision: {{ $.Values.targetRevision }}
+    path: charts/service
+    helm:
+      releaseName: {{ .name }}
+      valueFiles:
+        - ../../apps/{{ .name }}/values.yaml
+        - ../../envs/{{ $env }}/values.yaml
+  {{- include "app.syncPolicy" (dict "root" $ "app" (merge (dict "namespace" "shop") .)) | nindent 2 }}
+{{- end }}

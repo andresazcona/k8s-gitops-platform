@@ -1,0 +1,22 @@
+# Guardrail: shop Applications may only pull from this repo and the pinned chart repos,
+# and only deploy into the namespaces the platform owns.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: shop
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: Shop services and their platform add-ons
+  sourceRepos:
+    - {{ .Values.repoURL }}
+    {{- range .Values.addons }}
+    - {{ .repoURL }}
+    {{- end }}
+  destinations:
+    {{- range list "shop" "data" "observability" "ingress-nginx" "kube-system" }}
+    - {server: https://kubernetes.default.svc, namespace: {{ . }}}
+    {{- end }}
+  clusterResourceWhitelist:
+    - {group: "*", kind: "*"}   # add-ons install CRDs, ClusterRoles and webhooks

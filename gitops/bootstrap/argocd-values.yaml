@@ -1,0 +1,22 @@
+# helm install argocd argo/argo-cd --version 10.10.3 -n argocd --create-namespace -f gitops/bootstrap/argocd-values.yaml
+configs:
+  params:
+    server.insecure: true   # TLS terminates at the ingress / port-forward in front of argocd-server
+  cm:
+    # Sync waves between child Applications only work if Argo CD can judge an Application's health,
+    # which is not built in. Without this, wave N+1 starts before wave N is Healthy.
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil and obj.status.health ~= nil then
+        hs.status = obj.status.health.status
+        if obj.status.health.message ~= nil then
+          hs.message = obj.status.health.message
+        end
+      end
+      return hs
+dex:
+  enabled: false
+notifications:
+  enabled: false
