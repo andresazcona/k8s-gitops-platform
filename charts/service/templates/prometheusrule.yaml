@@ -16,8 +16,9 @@ spec:
         {{- range $w := list "5m" "1h" }}
         - record: slo:error_ratio:rate{{ $w }}
           labels: {service: {{ $name }}}
+          # "or vector(0)": with no 5xx series at all the ratio must read 0, not "no data".
           expr: |
-            sum(rate(http_server_request_duration_count{ {{- $sel }}, http_response_status_code=~"5.."}[{{ $w }}]))
+            (sum(rate(http_server_request_duration_count{ {{- $sel }}, http_response_status_code=~"5.."}[{{ $w }}])) or vector(0))
             /
             sum(rate(http_server_request_duration_count{ {{- $sel }}}[{{ $w }}]))
         {{- end }}
