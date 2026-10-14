@@ -1,0 +1,15 @@
+# dev: one kind node. Small CPU requests so the HPA demo scales out quickly.
+image:
+  tag: local   # scripts/up.sh builds this tag; CI rewrites it to the commit SHA on main
+otel:
+  environment: dev
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 256Mi}
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+ingress:
+  host: localhost

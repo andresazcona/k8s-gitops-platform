@@ -1,0 +1,6 @@
+apiVersion: v2
+name: service
+description: Opinionated chart for one stateless HTTP microservice (Deployment, Service, HPA, PDB, NetworkPolicy, ServiceMonitor, SLO alerts).
+type: application
+version: 0.1.0
+kubeVersion: ">=1.30.0-0"

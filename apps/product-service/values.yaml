@@ -1,0 +1,19 @@
+# Identity of product-service (Product catalog); sizing comes from envs/<env>/values.yaml.
+image:
+  repository: ghcr.io/andresazcona/k8s-gitops-platform/product-service
+secretEnv:
+  MONGODB_PASSWORD: {secret: mongodb-credentials, key: product-service}
+  JWT_SECRET: {secret: jwt, key: secret}
+env:
+  # Own database and user per service (created by platform/mongodb/init-users.js).
+  MONGODB_URI: mongodb://product-service:$(MONGODB_PASSWORD)@mongodb.data.svc:27017/products
+otel:
+  instrumentations: http,express,mongodb,mongoose
+networkPolicy:
+  allowFrom:
+    - podSelector: {matchExpressions: [{key: app.kubernetes.io/name, operator: In, values: [api-gateway, order-service]}]}
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: data}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: mongodb}}
+      ports: [{port: 27017}]

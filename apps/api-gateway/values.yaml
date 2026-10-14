@@ -1,0 +1,20 @@
+# Identity of api-gateway; sizing comes from envs/<env>/values.yaml.
+image:
+  repository: ghcr.io/andresazcona/k8s-gitops-platform/api-gateway
+env:
+  USER_SERVICE_URL: http://user-service
+  PRODUCT_SERVICE_URL: http://product-service
+  ORDER_SERVICE_URL: http://order-service
+probes:
+  readinessPath: /healthz   # stateless: ready as soon as it serves
+ingress:
+  enabled: true
+slo:
+  enabled: true             # the gateway is the user-facing SLO boundary
+networkPolicy:
+  allowFrom:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+  egress:
+    - to:
+        - podSelector: {matchExpressions: [{key: app.kubernetes.io/name, operator: In, values: [user-service, product-service, order-service]}]}
+      ports: [{port: 3000}]

@@ -1,0 +1,48 @@
+{{- if .Values.slo.enabled }}
+{{- $name := include "service.name" . }}
+{{- $sel := printf "namespace=%q, service=%q, http_route!~\"/healthz|/readyz\"" .Release.Namespace $name }}
+{{- $burn := round (mulf 14.4 (subf 1.0 .Values.slo.availability)) 5 }}
+# SLO alerts for {{ $name }}. Metrics come from the OpenTelemetry Prometheus exporter
+# (http.server.request.duration, stable HTTP semconv). Probe routes are excluded.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $name }}-slo
+  labels: {{- include "service.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: {{ $name }}-slo
+      rules:
+        {{- range $w := list "5m" "1h" }}
+        - record: slo:error_ratio:rate{{ $w }}
+          labels: {service: {{ $name }}}
+          expr: |
+            sum(rate(http_server_request_duration_count{ {{- $sel }}, http_response_status_code=~"5.."}[{{ $w }}]))
+            /
+            sum(rate(http_server_request_duration_count{ {{- $sel }}}[{{ $w }}]))
+        {{- end }}
+        - record: slo:fast_ratio:rate30m
+          labels: {service: {{ $name }}}
+          expr: |
+            sum(rate(http_server_request_duration_bucket{ {{- $sel }}, le={{ $.Values.slo.latencySeconds | quote }}}[30m]))
+            /
+            sum(rate(http_server_request_duration_count{ {{- $sel }}}[30m]))
+        # Multi-window burn rate (SRE workbook): 14.4x burns 2% of a 30-day budget in 1h.
+        - alert: ErrorBudgetFastBurn
+          expr: |
+            slo:error_ratio:rate1h{service="{{ $name }}"} > {{ $burn }}
+            and
+            slo:error_ratio:rate5m{service="{{ $name }}"} > {{ $burn }}
+          for: 2m
+          labels: {severity: critical, service: {{ $name }}}
+          annotations:
+            summary: "{{ $name }} is burning its {{ round (mulf 100 .Values.slo.availability) 2 }}% availability budget 14x too fast"
+            description: "5xx ratio over 1h is {{ "{{" }} $value | humanizePercentage {{ "}}" }}; at this rate the 30-day budget is gone in ~2 days."
+        - alert: LatencySLOBreach
+          expr: slo:fast_ratio:rate30m{service="{{ $name }}"} < {{ .Values.slo.latencyTarget }}
+          for: 10m
+          labels: {severity: warning, service: {{ $name }}}
+          annotations:
+            summary: "{{ $name }}: fewer than {{ round (mulf 100 .Values.slo.latencyTarget) 2 }}% of requests under {{ .Values.slo.latencySeconds }}s"
+            description: "Only {{ "{{" }} $value | humanizePercentage {{ "}}" }} of requests in the last 30m met the latency objective."
+{{- end }}

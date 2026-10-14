@@ -1,0 +1,18 @@
+# prod: HA by default (3+ replicas spread across nodes), sized for real traffic.
+image:
+  tag: "0.1.0"   # promoted from envs/dev/values.yaml by pull request
+otel:
+  environment: prod
+resources:
+  requests: {cpu: 250m, memory: 256Mi}
+  limits: {memory: 512Mi}
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 65
+pdb:
+  maxUnavailable: 1
+topologySpread: true
+ingress:
+  host: shop.example.com

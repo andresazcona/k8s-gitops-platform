@@ -1,0 +1,32 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $obs := .Values.networkPolicy.observabilityNamespace }}
+# Default deny for this workload; only the listed peers, Prometheus, DNS and OTLP are allowed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "service.name" . }}
+  labels: {{- include "service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "service.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    {{- with .Values.networkPolicy.allowFrom }}
+    - from: {{- toYaml . | nindent 8 }}
+      ports: [{port: http}]
+    {{- end }}
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $obs }}}}
+      ports: [{port: metrics}]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $obs }}}}
+      ports: [{port: 4318}]
+    {{- with .Values.networkPolicy.egress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

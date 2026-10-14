@@ -1,0 +1,63 @@
+# Defaults for one HTTP microservice.
+# Layering: apps/<service>/values.yaml (identity) -> envs/<env>/values.yaml (sizing).
+
+image:
+  repository: ""   # required
+  tag: ""          # required, immutable tags only (CI writes the git SHA)
+  pullPolicy: IfNotPresent
+
+replicas: 1        # ignored when autoscaling.enabled
+containerPort: 3000
+metricsPort: 9464  # OpenTelemetry Prometheus exporter
+
+# Secret-backed env vars are rendered first, so plain env values can reference them as $(NAME).
+secretEnv: {}      # NAME: {secret: <name>, key: <key>}
+env: {}            # NAME: value
+
+otel:
+  endpoint: http://otel-collector.observability.svc:4318
+  instrumentations: http,express
+  environment: dev
+
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {memory: 192Mi}   # no CPU limit: avoids CFS throttling, HPA works off requests
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+probes:
+  livenessPath: /healthz
+  readinessPath: /readyz
+
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  annotations: {}
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+
+# SLO alerts (PrometheusRule). Thresholds must sit on histogram bucket boundaries.
+slo:
+  enabled: false
+  availability: 0.995        # 30-day target for non-5xx responses
+  latencySeconds: "0.25"     # bucket boundary (le) for the latency SLI
+  latencyTarget: 0.95        # share of requests that must be faster than latencySeconds
+
+networkPolicy:
+  enabled: true
+  observabilityNamespace: observability
+  allowFrom: []   # NetworkPolicyPeers allowed to reach the http port
+  egress: []      # extra egress rules (DNS and OTLP are always allowed)
+
+topologySpread: false        # spread replicas across nodes (prod)
