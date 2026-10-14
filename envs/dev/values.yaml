@@ -1,6 +1,6 @@
 # dev: one kind node. Small CPU requests so the HPA demo scales out quickly.
 image:
-  tag: local   # scripts/up.sh builds this tag; CI rewrites it to the commit SHA on main
+  tag: "f0d8099"
 otel:
   environment: dev
 resources:
