@@ -1,0 +1,32 @@
+name: promote
+
+# Prod is never touched by CI. This opens a pull request that copies the image tag running in dev
+# into envs/prod/values.yaml; merging it makes the prod Applications OutOfSync until someone clicks Sync.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Open promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(awk '/^  tag:/{gsub(/"/, "", $2); print $2}' envs/dev/values.yaml)
+          [[ "$tag" != local ]] || { echo "dev still points at a local image"; exit 1; }
+          branch="promote/$tag"
+          sed -i -E "s|^(  tag: )[^ ]+|\1\"$tag\"|" envs/prod/values.yaml
+          git diff --quiet || {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$branch"
+            git commit -am "promote: prod -> $tag"
+            git push origin "$branch"
+            gh pr create --title "Promote $tag to prod" --body "Copies the tag currently deployed in dev. Merge, then review the diff in Argo CD and Sync." --base main
+          }

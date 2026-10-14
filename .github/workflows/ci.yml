@@ -1,0 +1,101 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-gateway, user-service, product-service, order-service]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.service }}/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.0
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+      # helm lint + helm template for every env, add-on and kustomize dir, all piped to kubeconform -strict.
+      - run: scripts/validate.sh
+
+  e2e:
+    needs: [unit, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1.12.0
+        with:
+          version: v0.29.0
+          cluster_name: shop
+          config: kind/kind-config.yaml
+      - uses: grafana/setup-k6-action@v1
+      # Builds the images, loads them into kind, installs ingress-nginx, MongoDB and the four services.
+      - run: scripts/up.sh
+      - run: k6 run k6/smoke.js
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl -n shop describe pods | tail -n 150
+          for d in $(kubectl -n shop get deploy -o name); do kubectl -n shop logs "$d" --tail=50 || true; done
+          kubectl -n data logs statefulset/mongodb --tail=50 || true
+
+  # Build and publish images, then bump the dev tag in git: Argo CD picks the change up and rolls dev.
+  # Prod is promoted separately (see promote.yml), so nothing here touches it.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    concurrency: release-dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push images
+        run: |
+          tag="${GITHUB_SHA::7}"
+          for values in apps/*/values.yaml; do
+            svc=$(basename "$(dirname "$values")")
+            image="$(awk '/repository:/{print $2}' "$values"):$tag"
+            docker build -f apps/Dockerfile -t "$image" "apps/$svc"
+            docker push "$image"
+          done
+      - name: Point dev at the new tag
+        run: |
+          tag="${GITHUB_SHA::7}"
+          sed -i -E "s|^(  tag: ).*|\1\"$tag\"|" envs/dev/values.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deploy: dev -> $tag" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
