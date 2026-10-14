@@ -18,7 +18,7 @@ addon() { # name [helm args]: install the pinned chart with the dev values, exac
   local name repo version ns files=()
   read -r name repo version ns < <(addons | grep "^$1 ")
   shift
-  files+=(-f "platform/$name/values.yaml")
+  [[ -f platform/$name/values.yaml ]] && files+=(-f "platform/$name/values.yaml")
   [[ -f platform/$name/values-dev.yaml ]] && files+=(-f "platform/$name/values-dev.yaml")
   helm upgrade --install "$name" "$name" --repo "$repo" --version "$version" -n "$ns" --create-namespace \
     "${files[@]}" "$@" --wait --timeout 10m
